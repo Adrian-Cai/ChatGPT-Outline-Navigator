@@ -4,8 +4,8 @@
   const STORAGE_KEY = 'chatgpt_outline_settings';
 
   const DEFAULT_CONFIG = {
-    rootId: 'tm-chatgpt-outline-root-v4',
-    legacyRootId: 'tm-chatgpt-outline-root',
+    rootId: 'tm-chatgpt-outline-root',
+    legacyRootId: 'tm-chatgpt-outline-root-v4',
     rootLayout: 'rail-card-v4',
     panelRight: 10,
     expandedWidth: 320,
@@ -245,9 +245,23 @@
   }
 
   function getOutlineRoots() {
-    return [...document.querySelectorAll(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`)].filter(
-      (node) => node instanceof HTMLElement
+    const roots = document.querySelectorAll(
+      `#${CONFIG.rootId}, #${CONFIG.legacyRootId}, [id^="tm-chatgpt-outline-root"], [data-tm-outline-layout]`
     );
+
+    return [...new Set([...roots])].filter((node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      return (
+        node.id === CONFIG.rootId ||
+        node.id === CONFIG.legacyRootId ||
+        node.id.startsWith('tm-chatgpt-outline-root') ||
+        Boolean(node.dataset?.tmOutlineLayout)
+      );
+    });
+  }
+
+  function getOutlineRootSelector() {
+    return `#${CONFIG.rootId}, #${CONFIG.legacyRootId}, [id^="tm-chatgpt-outline-root"], [data-tm-outline-layout]`;
   }
 
   function isCurrentRoot(root) {
@@ -268,10 +282,10 @@
       if (root !== keepRoot) root.remove();
     });
 
-    document.querySelectorAll('.tm-outline-shell, .tm-outline-panel, .tm-outline-rail, .tm-outline-rail-stack').forEach((node) => {
+    document.querySelectorAll('.tm-outline-shell, .tm-outline-panel, .tm-outline-rail, .tm-outline-rail-stack, .tm-outline-tick').forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
-      const ownerRoot = node.closest(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`);
-      if (!ownerRoot && node.parentElement) node.remove();
+      const ownerRoot = node.closest(getOutlineRootSelector());
+      if (ownerRoot !== keepRoot && node.parentElement) node.remove();
     });
   }
 
@@ -1096,7 +1110,7 @@
       if (nowLockedByClick()) return;
 
       for (const mutation of mutations) {
-        if (mutation.target instanceof Element && mutation.target.closest(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`)) {
+        if (mutation.target instanceof Element && mutation.target.closest(getOutlineRootSelector())) {
           continue;
         }
         if (mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length)) {
@@ -1170,9 +1184,12 @@
       extractTextFromMessageContent,
       getConversationIdFromPath,
       getConversationPathNodeIds,
+      cleanupDuplicateRoots,
+      getOutlineRoots,
       mapActiveIdToNearestOutlineId,
       pickBestViewportItemId,
       parseConversationResponse,
+      removeStaleOutlineNodes,
     };
   }
 
