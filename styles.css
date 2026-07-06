@@ -5,7 +5,7 @@
 
 #tm-chatgpt-outline-root {
   --outline-panel-right: 10px;
-  --outline-expanded-width: 240px;
+  --outline-expanded-width: 320px;
   --outline-collapsed-width: 18px;
   --outline-tick-height: 320px;
   --outline-panel-max-height: 150px;
@@ -27,6 +27,14 @@
 }
 
 #tm-chatgpt-outline-root.hidden-by-screen {
+  display: none !important;
+}
+
+#tm-chatgpt-outline-root:not([data-tm-outline-layout="rail-card-v4"]) {
+  display: none !important;
+}
+
+#tm-chatgpt-outline-root[data-tm-outline-layout="rail-card-v4"] ~ #tm-chatgpt-outline-root {
   display: none !important;
 }
 
@@ -63,8 +71,8 @@
   max-height: min(68vh, var(--outline-panel-max-height));
   background: var(--outline-surface);
   border: 1px solid var(--outline-border);
-  border-radius: 8px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.1);
   backdrop-filter: blur(12px);
   overflow: hidden;
   display: flex;
@@ -72,24 +80,11 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-panel-inner::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 12px;
-  width: 1px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.24);
-  pointer-events: none;
+  display: none;
 }
 
 #tm-chatgpt-outline-root .tm-outline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 30px;
-  padding: 7px 8px 0 24px;
+  display: none;
 }
 
 #tm-chatgpt-outline-root .tm-outline-title {
@@ -171,12 +166,45 @@
   border-radius: 999px;
 }
 
+#tm-chatgpt-outline-root .tm-current-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+}
+
+#tm-chatgpt-outline-root .tm-current-icon::before,
+#tm-chatgpt-outline-root .tm-current-icon::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+  border-radius: 999px;
+}
+
+#tm-chatgpt-outline-root .tm-current-icon::before {
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+}
+
+#tm-chatgpt-outline-root .tm-current-icon::after {
+  top: 50%;
+  left: -4px;
+  width: 18px;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
 #tm-chatgpt-outline-root .tm-outline-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 0 12px 24px;
+  padding: 10px 8px;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -207,16 +235,15 @@
 #tm-chatgpt-outline-root .tm-outline-item {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 16px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  gap: 8px;
   width: 100%;
   min-height: 30px;
   text-align: left;
   border: none;
   background: transparent;
-  border-radius: 0;
-  padding: 4px 0;
+  border-radius: 9px;
+  padding: 5px 8px;
   cursor: pointer;
   color: #6b7280;
   transition: color 0.14s ease, background 0.14s ease;
@@ -224,6 +251,7 @@
 
 #tm-chatgpt-outline-root .tm-outline-item:hover,
 #tm-chatgpt-outline-root .tm-outline-item:focus-visible {
+  background: rgba(15, 23, 42, 0.04);
   color: #374151;
   outline: none;
 }
@@ -233,6 +261,7 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-item.active {
+  background: rgba(15, 23, 42, 0.06);
   color: var(--outline-strong);
   font-weight: 600;
 }
@@ -240,7 +269,7 @@
 #tm-chatgpt-outline-root .tm-outline-item-title {
   display: -webkit-box;
   min-width: 0;
-  padding: 3px 4px 3px 0;
+  padding: 0;
   border-radius: 4px;
   font-size: 12px;
   line-height: 1.35;
@@ -252,11 +281,7 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-item-marker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  pointer-events: none;
+  display: none;
 }
 
 #tm-chatgpt-outline-root .tm-outline-item-marker > span {

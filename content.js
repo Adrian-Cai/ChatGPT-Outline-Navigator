@@ -5,8 +5,9 @@
 
   const DEFAULT_CONFIG = {
     rootId: 'tm-chatgpt-outline-root',
+    rootLayout: 'rail-card-v4',
     panelRight: 10,
-    expandedWidth: 240,
+    expandedWidth: 320,
     collapsedWidth: 18,
     maxOutlineItems: 10,
     tickMapHeight: 320,
@@ -19,7 +20,7 @@
     onlyUserMessages: true,
     smallScreenWidth: 1100,
     autoHideOnSmallScreen: true,
-    panelMaxHeight: '150px',
+    panelMaxHeight: '620px',
     clickLockMs: 650,
     activeScrollDelayMs: 180,
     defaultPinned: false,
@@ -53,6 +54,7 @@
     domItemCache: new Map(),
     activeItems: [],
     pendingJumpId: null,
+    cleanupTimer: null,
   };
 
   const logger = {
@@ -105,7 +107,7 @@
       maxOutlineItems: clampNumber(settings.maxOutlineItems, 5, 20, DEFAULT_CONFIG.maxOutlineItems),
       onlyUserMessages: Boolean(settings.onlyUserMessages ?? DEFAULT_CONFIG.onlyUserMessages),
       panelRight: clampNumber(settings.panelRight, 0, 48, DEFAULT_CONFIG.panelRight),
-      expandedWidth: clampNumber(settings.expandedWidth, 200, 360, DEFAULT_CONFIG.expandedWidth),
+      expandedWidth: clampNumber(settings.expandedWidth, 300, 420, DEFAULT_CONFIG.expandedWidth),
       tickMapHeight: clampNumber(settings.tickMapHeight, 220, 500, DEFAULT_CONFIG.tickMapHeight),
       autoHideOnSmallScreen: Boolean(settings.autoHideOnSmallScreen ?? DEFAULT_CONFIG.autoHideOnSmallScreen),
       defaultPinned: Boolean(settings.defaultPinned ?? DEFAULT_CONFIG.defaultPinned),
@@ -241,12 +243,60 @@
     return Date.now() < state.clickLockUntil;
   }
 
-  function createRoot() {
-    let root = document.getElementById(CONFIG.rootId);
-    if (root) return root;
+  function getOutlineRoots() {
+    return [...document.querySelectorAll(`#${CONFIG.rootId}`)].filter((node) => node instanceof HTMLElement);
+  }
 
-    root = document.createElement('div');
+  function isCurrentRoot(root) {
+    return (
+      root?.dataset?.tmOutlineLayout === CONFIG.rootLayout &&
+      root.querySelector('.tm-current-btn') &&
+      root.querySelector('.tm-outline-rail')
+    );
+  }
+
+  function getManagedRoot() {
+    return getOutlineRoots().find(isCurrentRoot) || document.getElementById(CONFIG.rootId);
+  }
+
+  function removeStaleOutlineNodes(keepRoot = null) {
+    getOutlineRoots().forEach((root) => {
+      if (root !== keepRoot) root.remove();
+    });
+
+    document.querySelectorAll('.tm-outline-shell, .tm-outline-panel, .tm-outline-rail, .tm-outline-rail-stack').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      const ownerRoot = node.closest(`#${CONFIG.rootId}`);
+      if (!ownerRoot && node.parentElement) node.remove();
+    });
+  }
+
+  function cleanupDuplicateRoots() {
+    const roots = getOutlineRoots();
+    if (roots.length <= 1 && roots.every(isCurrentRoot)) return;
+
+    const keepRoot = roots.find(isCurrentRoot) || null;
+    removeStaleOutlineNodes(keepRoot);
+  }
+
+  function setupRootCleanup() {
+    if (state.cleanupTimer) clearInterval(state.cleanupTimer);
+    cleanupDuplicateRoots();
+    state.cleanupTimer = setInterval(cleanupDuplicateRoots, 600);
+  }
+
+  function createRoot() {
+    const existingRoots = getOutlineRoots();
+    const currentRoot = existingRoots.find(isCurrentRoot);
+    if (currentRoot) {
+      removeStaleOutlineNodes(currentRoot);
+      return currentRoot;
+    }
+    removeStaleOutlineNodes();
+
+    const root = document.createElement('div');
     root.id = CONFIG.rootId;
+    root.dataset.tmOutlineLayout = CONFIG.rootLayout;
     root.innerHTML = `
       <div class="tm-outline-shell">
         <div class="tm-outline-panel">
@@ -256,6 +306,9 @@
               <div class="tm-outline-header-right">
                 <button class="tm-outline-btn tm-pin-btn" type="button" aria-label="固定展开" title="固定展开">
                   <span class="tm-pin-icon" aria-hidden="true"></span>
+                </button>
+                <button class="tm-outline-btn tm-current-btn" type="button" aria-label="定位当前对话" title="定位当前对话">
+                  <span class="tm-current-icon" aria-hidden="true"></span>
                 </button>
               </div>
             </div>
@@ -278,10 +331,15 @@
       if (!state.isPinned) collapsePanel();
     });
 
-    const pinBtn = root.querySelector('.tm-pin-btn');
-    pinBtn?.addEventListener('click', (event) => {
+    root.querySelectorAll('.tm-pin-btn').forEach((pinBtn) => pinBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       togglePin();
+    }));
+
+    const currentBtn = root.querySelector('.tm-current-btn');
+    currentBtn?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      locateCurrentInPanel();
     });
 
     window.addEventListener(
@@ -298,7 +356,7 @@
   }
 
   function applyVisualSettings() {
-    const root = document.getElementById(CONFIG.rootId);
+    const root = getManagedRoot();
     if (!root) return;
 
     root.style.setProperty('--outline-panel-right', `${CONFIG.panelRight}px`);
@@ -309,6 +367,7 @@
     root.classList.toggle('no-rail-line', !CONFIG.showRailLine);
     root.classList.toggle('hidden-by-screen', CONFIG.autoHideOnSmallScreen && isSmallScreen());
     root.classList.toggle('expanded', state.isExpanded);
+    root.classList.toggle('pinned', state.isPinned);
   }
 
   function expandPanel() {
@@ -338,12 +397,14 @@
   }
 
   function updatePinButton() {
-    const root = document.getElementById(CONFIG.rootId);
-    const pinBtn = root?.querySelector('.tm-pin-btn');
-    if (!pinBtn) return;
-    pinBtn.classList.toggle('pinned', state.isPinned);
-    pinBtn.title = state.isPinned ? '取消固定展开' : '固定展开';
-    pinBtn.setAttribute('aria-label', pinBtn.title);
+    const root = getManagedRoot();
+    const pinButtons = root?.querySelectorAll('.tm-pin-btn') || [];
+    pinButtons.forEach((pinBtn) => {
+      pinBtn.classList.toggle('pinned', state.isPinned);
+      pinBtn.title = state.isPinned ? '取消固定展开' : '固定展开';
+      pinBtn.setAttribute('aria-label', pinBtn.title);
+      pinBtn.setAttribute('aria-pressed', String(state.isPinned));
+    });
   }
 
   function getConversationPathNodeIds(data) {
@@ -625,22 +686,38 @@
     return result.filter((item, index, arr) => index === arr.findIndex((candidate) => candidate.id === item.id));
   }
 
-  function buildTickItems(outlineItems) {
-    const count = outlineItems.length;
-    if (!count) return [];
+  function getNavigationSourceItems() {
+    return state.activeItems.length ? state.activeItems : state.allItems;
+  }
 
-    if (count === 1) {
-      return [{ ...outlineItems[0], mapY: Math.round(CONFIG.tickMapHeight / 2) }];
-    }
+  function getCurrentNavigationItem() {
+    const sourceItems = getNavigationSourceItems();
+    if (!sourceItems.length || !state.activeId) return null;
+
+    return (
+      sourceItems.find((item) => item.id === state.activeId) ||
+      state.allItems.find((item) => item.id === state.activeId) ||
+      null
+    );
+  }
+
+  function getRailMapY(index, count) {
+    if (!count) return null;
+    if (count === 1) return Math.round(CONFIG.tickMapHeight / 2);
 
     const topPadding = 8;
     const bottomPadding = 8;
     const usableHeight = CONFIG.tickMapHeight - topPadding - bottomPadding;
-    const step = usableHeight / (count - 1);
+    return Math.round(topPadding + (usableHeight / (count - 1)) * index);
+  }
+
+  function buildTickItems(outlineItems) {
+    const count = outlineItems.length;
+    if (!count) return [];
 
     return outlineItems.map((item, index) => ({
       ...item,
-      mapY: Math.round(topPadding + step * index),
+      mapY: getRailMapY(index, count),
     }));
   }
 
@@ -673,7 +750,8 @@
     if (!rail) return;
 
     const tickItems = buildTickItems(state.outlineItems);
-    const highlightedId = mapActiveIdToNearestOutlineId(state.activeId, state.outlineItems, state.allItems);
+    const sourceItems = getNavigationSourceItems();
+    const highlightedId = mapActiveIdToNearestOutlineId(state.activeId, state.outlineItems, sourceItems);
     const tickKey = JSON.stringify({
       ids: tickItems.map((item) => [item.id, item.mapY]),
       active: highlightedId,
@@ -683,6 +761,7 @@
     if (!force && tickKey === state.lastRenderedTickKey) return;
     state.lastRenderedTickKey = tickKey;
     rail.innerHTML = '';
+    updateCurrentButton();
 
     if (!tickItems.length) {
       const empty = document.createElement('button');
@@ -726,7 +805,7 @@
       return;
     }
 
-    const highlightedId = mapActiveIdToNearestOutlineId(state.activeId, state.outlineItems, state.allItems);
+    const highlightedId = mapActiveIdToNearestOutlineId(state.activeId, state.outlineItems, getNavigationSourceItems());
     body.innerHTML = '';
 
     state.outlineItems.forEach((item) => {
@@ -753,6 +832,29 @@
     scheduleEnsureActiveVisible();
   }
 
+  function updateCurrentButton() {
+    const root = getManagedRoot();
+    const currentBtn = root?.querySelector('.tm-current-btn');
+    if (!currentBtn) return;
+
+    const currentItem = getCurrentNavigationItem();
+    currentBtn.disabled = !currentItem;
+    currentBtn.title = currentItem ? `定位当前对话：${currentItem.title}` : '暂无当前对话';
+    currentBtn.setAttribute('aria-label', currentBtn.title);
+  }
+
+  function locateCurrentInPanel() {
+    if (!state.activeId) return;
+
+    clearTimeout(state.collapseTimer);
+    clearTimeout(state.expandTimer);
+    state.isExpanded = true;
+    applyVisualSettings();
+    renderPanelItems();
+    renderTicks(true);
+    setTimeout(() => ensureActiveItemVisible(), 40);
+  }
+
   function scheduleEnsureActiveVisible() {
     clearTimeout(state.activeScrollTimer);
     state.activeScrollTimer = setTimeout(() => {
@@ -761,7 +863,7 @@
   }
 
   function ensureActiveItemVisible() {
-    const root = document.getElementById(CONFIG.rootId);
+    const root = getManagedRoot();
     const body = root?.querySelector('.tm-outline-body');
     const active = root?.querySelector('.tm-outline-item.active');
     if (!body || !active) return;
@@ -956,12 +1058,11 @@
       state.allItems = await buildAllItems();
       state.outlineItems = buildFixedOutlineItems(state.allItems);
       const visibleActiveId = pickBestViewportItemId(state.activeItems);
-      const viewportActiveId = mapActiveIdToNearestOutlineId(visibleActiveId, state.outlineItems, state.activeItems);
 
       if (!state.allItems.length) {
         state.activeId = null;
-      } else if (viewportActiveId) {
-        state.activeId = viewportActiveId;
+      } else if (visibleActiveId) {
+        state.activeId = visibleActiveId;
       } else if (oldActiveId && state.allItems.some((item) => item.id === oldActiveId)) {
         state.activeId = oldActiveId;
       } else {
@@ -1041,6 +1142,7 @@
 
     createRoot();
     setupStorageWatcher();
+    setupRootCleanup();
     setupMutationObserver();
     setupUrlWatcher();
     setupScrollListener();
