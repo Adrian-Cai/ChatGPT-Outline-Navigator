@@ -13,13 +13,13 @@
     hoverExpandDelay: 70,
     hoverCollapseDelay: 220,
     refreshDebounceMs: 280,
-    outlineTitleMaxLen: 16,
+    outlineTitleMaxLen: 64,
     highlightClass: 'tm-chatgpt-outline-target-highlight',
     debug: false,
     onlyUserMessages: true,
     smallScreenWidth: 1100,
     autoHideOnSmallScreen: true,
-    panelMaxHeight: '68vh',
+    panelMaxHeight: '150px',
     clickLockMs: 650,
     activeScrollDelayMs: 180,
     defaultPinned: false,
@@ -187,10 +187,12 @@
             <div class="tm-outline-header">
               <div class="tm-outline-title">对话大纲</div>
               <div class="tm-outline-header-right">
-                <button class="tm-outline-btn tm-pin-btn" type="button" aria-label="固定展开" title="固定展开">📌</button>
+                <button class="tm-outline-btn tm-pin-btn" type="button" aria-label="固定展开" title="固定展开">
+                  <span class="tm-pin-icon" aria-hidden="true"></span>
+                </button>
               </div>
             </div>
-            <div class="tm-outline-body">
+            <div class="tm-outline-body" aria-label="对话大纲列表">
               <div class="tm-outline-empty" role="status">正在扫描当前对话...</div>
             </div>
           </div>
@@ -465,8 +467,16 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tm-outline-item';
-      if (item.id === highlightedId) btn.classList.add('active');
-      btn.innerHTML = `<span class="tm-outline-item-title">${escapeHtml(item.title)}</span>`;
+      btn.title = item.rawText;
+      btn.setAttribute('aria-label', `跳转到：${item.title}`);
+      if (item.id === highlightedId) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-current', 'true');
+      }
+      btn.innerHTML = `
+        <span class="tm-outline-item-title">${escapeHtml(item.title)}</span>
+        <span class="tm-outline-item-marker" aria-hidden="true"><span></span></span>
+      `;
       btn.addEventListener('click', (event) => {
         event.stopPropagation();
         jumpToMessage(item.id);

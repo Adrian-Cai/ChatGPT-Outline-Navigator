@@ -1,14 +1,20 @@
+#tm-chatgpt-outline-root,
+#tm-chatgpt-outline-root * {
+  box-sizing: border-box;
+}
+
 #tm-chatgpt-outline-root {
   --outline-panel-right: 10px;
   --outline-expanded-width: 240px;
   --outline-collapsed-width: 18px;
   --outline-tick-height: 320px;
-  --outline-panel-max-height: 68vh;
-  --outline-primary: #4c6fff;
-  --outline-text: #6f6f6f;
-  --outline-muted: #9a9a9a;
+  --outline-panel-max-height: 150px;
+  --outline-primary: #4d6bfe;
+  --outline-text: #4b5563;
+  --outline-strong: #202123;
+  --outline-muted: #9b9b9b;
   --outline-border: rgba(15, 23, 42, 0.08);
-  --outline-surface: rgba(250, 250, 250, 0.94);
+  --outline-surface: rgba(255, 255, 255, 0.78);
   position: fixed;
   top: 50%;
   right: var(--outline-panel-right);
@@ -51,28 +57,44 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-panel-inner {
-  max-height: var(--outline-panel-max-height);
+  position: relative;
+  height: var(--outline-panel-max-height);
+  min-height: 112px;
+  max-height: min(68vh, var(--outline-panel-max-height));
   background: var(--outline-surface);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 18px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
-  backdrop-filter: blur(10px);
+  border: 1px solid var(--outline-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+#tm-chatgpt-outline-root .tm-outline-panel-inner::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 12px;
+  width: 1px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.24);
+  pointer-events: none;
 }
 
 #tm-chatgpt-outline-root .tm-outline-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 10px 6px 12px;
+  gap: 8px;
+  min-height: 30px;
+  padding: 7px 8px 0 24px;
 }
 
 #tm-chatgpt-outline-root .tm-outline-title {
   min-width: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--outline-muted);
   letter-spacing: 0;
@@ -88,35 +110,80 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-btn {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
   border: none;
   background: transparent;
-  color: #a6a6a6;
+  color: #a3a3a3;
   cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  padding: 5px 6px;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: 6px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 #tm-chatgpt-outline-root .tm-outline-btn:hover,
 #tm-chatgpt-outline-root .tm-outline-btn:focus-visible {
-  background: rgba(0, 0, 0, 0.04);
-  color: #555;
+  background: rgba(15, 23, 42, 0.06);
+  color: #525252;
   outline: none;
+}
+
+#tm-chatgpt-outline-root .tm-outline-btn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(77, 107, 254, 0.24);
 }
 
 #tm-chatgpt-outline-root .tm-outline-btn.pinned {
   color: var(--outline-primary);
-  background: rgba(76, 111, 255, 0.08);
+  background: rgba(77, 107, 254, 0.1);
+}
+
+#tm-chatgpt-outline-root .tm-pin-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+#tm-chatgpt-outline-root .tm-pin-icon::before,
+#tm-chatgpt-outline-root .tm-pin-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  background: currentColor;
+  transform: translateX(-50%) rotate(35deg);
+  transform-origin: center;
+}
+
+#tm-chatgpt-outline-root .tm-pin-icon::before {
+  top: 2px;
+  width: 6px;
+  height: 7px;
+  border-radius: 2px 2px 1px 1px;
+}
+
+#tm-chatgpt-outline-root .tm-pin-icon::after {
+  top: 8px;
+  width: 2px;
+  height: 5px;
+  border-radius: 999px;
 }
 
 #tm-chatgpt-outline-root .tm-outline-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 2px 4px 6px 6px;
+  padding: 4px 0 12px 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(180, 180, 180, 0.45) transparent;
+  scrollbar-color: transparent transparent;
+}
+
+#tm-chatgpt-outline-root .tm-outline-body:hover,
+#tm-chatgpt-outline-root .tm-outline-body:focus-within {
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
 }
 
 #tm-chatgpt-outline-root .tm-outline-body::-webkit-scrollbar {
@@ -128,52 +195,93 @@
 }
 
 #tm-chatgpt-outline-root .tm-outline-body::-webkit-scrollbar-thumb {
-  background: rgba(180, 180, 180, 0.45);
+  background: transparent;
   border-radius: 999px;
+}
+
+#tm-chatgpt-outline-root .tm-outline-body:hover::-webkit-scrollbar-thumb,
+#tm-chatgpt-outline-root .tm-outline-body:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
 }
 
 #tm-chatgpt-outline-root .tm-outline-item {
   position: relative;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
+  min-height: 30px;
   text-align: left;
   border: none;
   background: transparent;
-  border-radius: 10px;
-  padding: 7px 22px 7px 10px;
+  border-radius: 0;
+  padding: 4px 0;
   cursor: pointer;
-  color: #858585;
+  color: #6b7280;
   transition: color 0.14s ease, background 0.14s ease;
-  margin-bottom: 0;
 }
 
 #tm-chatgpt-outline-root .tm-outline-item:hover,
 #tm-chatgpt-outline-root .tm-outline-item:focus-visible {
-  background: rgba(0, 0, 0, 0.03);
-  color: #555;
+  color: #374151;
   outline: none;
 }
 
+#tm-chatgpt-outline-root .tm-outline-item:focus-visible .tm-outline-item-title {
+  box-shadow: inset 0 0 0 2px rgba(77, 107, 254, 0.2);
+}
+
 #tm-chatgpt-outline-root .tm-outline-item.active {
-  color: var(--outline-primary);
-  background: transparent;
-  font-weight: 500;
+  color: var(--outline-strong);
+  font-weight: 600;
 }
 
 #tm-chatgpt-outline-root .tm-outline-item-title {
-  display: block;
-  width: 100%;
+  display: -webkit-box;
   min-width: 0;
-  font-size: 13px;
-  line-height: 1.25;
-  white-space: nowrap;
+  padding: 3px 4px 3px 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#tm-chatgpt-outline-root .tm-outline-item-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  pointer-events: none;
+}
+
+#tm-chatgpt-outline-root .tm-outline-item-marker > span {
+  width: 2px;
+  height: 0;
+  border-radius: 999px;
+  background: rgba(77, 107, 254, 0.28);
+  opacity: 0;
+  transition: height 0.14s ease, opacity 0.14s ease, background 0.14s ease;
+}
+
+#tm-chatgpt-outline-root .tm-outline-item:hover .tm-outline-item-marker > span,
+#tm-chatgpt-outline-root .tm-outline-item:focus-visible .tm-outline-item-marker > span {
+  height: 10px;
+  opacity: 1;
+}
+
+#tm-chatgpt-outline-root .tm-outline-item.active .tm-outline-item-marker > span {
+  height: 20px;
+  opacity: 1;
+  background: var(--outline-primary);
 }
 
 #tm-chatgpt-outline-root .tm-outline-empty {
-  padding: 12px;
+  padding: 10px 8px 10px 0;
   font-size: 12px;
   color: var(--outline-muted);
   line-height: 1.5;
@@ -198,7 +306,7 @@
   transform: translateX(-50%);
   width: 1px;
   border-radius: 999px;
-  background: rgba(190, 190, 190, 0.28);
+  background: rgba(148, 163, 184, 0.32);
   pointer-events: none;
 }
 
@@ -215,7 +323,7 @@
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(150, 150, 150, 0.72);
+  background: rgba(107, 114, 128, 0.62);
   appearance: none;
   transition: width 0.14s ease, height 0.14s ease, background 0.14s ease, transform 0.14s ease;
   cursor: pointer;
@@ -224,8 +332,12 @@
 #tm-chatgpt-outline-root .tm-outline-tick:hover,
 #tm-chatgpt-outline-root .tm-outline-tick:focus-visible {
   width: 12px;
-  background: rgba(100, 100, 100, 0.9);
+  background: rgba(55, 65, 81, 0.9);
   outline: none;
+}
+
+#tm-chatgpt-outline-root .tm-outline-tick:focus-visible {
+  box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.2);
 }
 
 #tm-chatgpt-outline-root .tm-outline-tick.active {
@@ -235,8 +347,18 @@
 }
 
 .tm-chatgpt-outline-target-highlight {
-  outline: 2px solid rgba(76, 111, 255, 0.6) !important;
+  outline: 2px solid rgba(77, 107, 254, 0.6) !important;
   outline-offset: 6px !important;
   border-radius: 12px !important;
   transition: outline 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tm-chatgpt-outline-root .tm-outline-panel,
+  #tm-chatgpt-outline-root .tm-outline-btn,
+  #tm-chatgpt-outline-root .tm-outline-item,
+  #tm-chatgpt-outline-root .tm-outline-item-marker > span,
+  #tm-chatgpt-outline-root .tm-outline-tick {
+    transition: none;
+  }
 }
