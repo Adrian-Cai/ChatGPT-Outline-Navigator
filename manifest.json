@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Outline Navigator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "ChatGPT 对话大纲导航插件，支持刻度导航、hover 展开、图钉固定、设置项与快速跳转。",
   "permissions": ["storage"],
   "options_page": "options.html",
   "action": {
     "default_title": "ChatGPT Outline Navigator",
     "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "16": "icons/outline-icon16.png",
+      "32": "icons/outline-icon32.png",
+      "48": "icons/outline-icon48.png",
+      "128": "icons/outline-icon128.png"
     }
   },
   "content_scripts": [
@@ -29,8 +30,9 @@
     "https://chat.openai.com/*"
   ],
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "icons/outline-icon16.png",
+    "32": "icons/outline-icon32.png",
+    "48": "icons/outline-icon48.png",
+    "128": "icons/outline-icon128.png"
   }
 }

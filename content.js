@@ -24,6 +24,7 @@
     activeScrollDelayMs: 180,
     defaultPinned: false,
     showRailLine: true,
+    conversationFetchCooldownMs: 2500,
   };
 
   const CONFIG = { ...DEFAULT_CONFIG };
@@ -45,6 +46,12 @@
     activeScrollTimer: null,
     lastRenderedTickKey: '',
     visibleMap: new Map(),
+    conversationId: '',
+    conversationItems: [],
+    conversationFetchedAt: 0,
+    conversationFetchPromise: null,
+    domItemCache: new Map(),
+    pendingJumpId: null,
   };
 
   const logger = {
@@ -162,8 +169,66 @@
       .replaceAll("'", '&#39;');
   }
 
+  function hashText(text) {
+    let hash = 0;
+    const source = String(text || '');
+    for (let i = 0; i < source.length; i += 1) {
+      hash = (hash * 31 + source.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  function makeTextKey(role, text) {
+    const clean = cleanText(text);
+    return `${role}:${clean.length}:${hashText(clean)}`;
+  }
+
+  function normalizeContentPart(part) {
+    if (typeof part === 'string') return part;
+    if (!part || typeof part !== 'object') return '';
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.name === 'string') return part.name;
+    if (typeof part.content === 'string') return part.content;
+    try {
+      return JSON.stringify(part);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function extractTextFromMessageContent(content) {
+    if (!content) return '';
+    if (typeof content === 'string') return cleanText(content);
+
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    if (parts.length) {
+      return cleanText(parts.map(normalizeContentPart).filter(Boolean).join(' '));
+    }
+
+    if (typeof content.text === 'string') return cleanText(content.text);
+    if (typeof content.result === 'string') return cleanText(content.result);
+
+    return '';
+  }
+
   function normalizeUrlPath() {
     return `${location.pathname}${location.search}`;
+  }
+
+  function getConversationIdFromPath(pathname = location.pathname) {
+    const match = String(pathname || '').match(/\/c\/([^/?#]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function resetConversationStateIfNeeded(conversationId) {
+    if (state.conversationId === conversationId) return;
+
+    state.conversationId = conversationId;
+    state.conversationItems = [];
+    state.conversationFetchedAt = 0;
+    state.conversationFetchPromise = null;
+    state.domItemCache = new Map();
+    state.pendingJumpId = null;
   }
 
   function isSmallScreen() {
@@ -279,6 +344,115 @@
     pinBtn.setAttribute('aria-label', pinBtn.title);
   }
 
+  function getConversationPathNodeIds(data) {
+    const mapping = data?.mapping || {};
+    const path = [];
+    const seen = new Set();
+    let currentId = data?.current_node;
+
+    while (currentId && mapping[currentId] && !seen.has(currentId)) {
+      seen.add(currentId);
+      path.push(currentId);
+      currentId = mapping[currentId].parent;
+    }
+
+    return path.reverse();
+  }
+
+  function getFallbackOrderedNodeIds(data) {
+    const mapping = data?.mapping || {};
+    return Object.values(mapping)
+      .filter((node) => node?.message)
+      .sort((a, b) => {
+        const aTime = Number(a.message?.create_time || 0);
+        const bTime = Number(b.message?.create_time || 0);
+        return aTime - bTime;
+      })
+      .map((node) => node.id)
+      .filter(Boolean);
+  }
+
+  function parseConversationResponse(data) {
+    const mapping = data?.mapping || {};
+    const nodeIds = getConversationPathNodeIds(data);
+    const orderedIds = nodeIds.length ? nodeIds : getFallbackOrderedNodeIds(data);
+
+    return orderedIds
+      .map((nodeId, index) => {
+        const node = mapping[nodeId];
+        const message = node?.message;
+        const role = message?.author?.role;
+        if (role !== 'user' && role !== 'assistant') return null;
+
+        const rawText = extractTextFromMessageContent(message.content);
+        if (!rawText || rawText.length < 2) return null;
+
+        const sourceId = message.id || node.id || nodeId;
+        return {
+          id: sourceId || `api-${index}`,
+          sourceId,
+          role,
+          title: truncateText(rawText),
+          rawText,
+          element: null,
+          position: index,
+          fromApi: true,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  async function fetchConversationItems() {
+    const conversationId = getConversationIdFromPath();
+    resetConversationStateIfNeeded(conversationId);
+    if (!conversationId) return [];
+
+    const now = Date.now();
+    if (state.conversationItems.length && now - state.conversationFetchedAt < CONFIG.conversationFetchCooldownMs) {
+      return state.conversationItems;
+    }
+
+    if (state.conversationFetchPromise) {
+      return state.conversationFetchPromise;
+    }
+
+    const url = `${location.origin}/backend-api/conversation/${encodeURIComponent(conversationId)}`;
+    state.conversationFetchPromise = fetch(url, {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+      },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`conversation fetch failed: ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        state.conversationItems = parseConversationResponse(data);
+        state.conversationFetchedAt = Date.now();
+        return state.conversationItems;
+      })
+      .catch((error) => {
+        logger.info('conversation fetch unavailable, using DOM fallback:', error);
+        return state.conversationItems;
+      })
+      .finally(() => {
+        state.conversationFetchPromise = null;
+      });
+
+    return state.conversationFetchPromise;
+  }
+
+  function getNodeSourceId(node) {
+    return (
+      node.getAttribute?.('data-message-id') ||
+      node.getAttribute?.('data-testid') ||
+      node.id ||
+      ''
+    );
+  }
+
   function collectCandidateMessageNodes() {
     const result = [];
     const seen = new Set();
@@ -315,7 +489,7 @@
     return fallbackRole;
   }
 
-  function buildAllItems() {
+  function buildDomItems() {
     const nodes = collectCandidateMessageNodes();
     const items = [];
     let fallbackRole = 'user';
@@ -329,20 +503,110 @@
 
       if (CONFIG.onlyUserMessages && role !== 'user') continue;
 
-      if (!node.dataset.tmOutlineId) {
-        node.dataset.tmOutlineId = safeId(role);
-      }
+      const sourceId = getNodeSourceId(node);
+      if (!node.dataset.tmOutlineId) node.dataset.tmOutlineId = sourceId || safeId(role);
+      const rect = node.getBoundingClientRect();
 
       items.push({
         id: node.dataset.tmOutlineId,
+        sourceId,
         role,
         title: truncateText(text),
         rawText: text,
         element: node,
+        position: rect.top + window.scrollY,
+        textKey: makeTextKey(role, text),
+        fromApi: false,
       });
     }
 
     return items;
+  }
+
+  function isConnectedElement(element) {
+    return Boolean(element && (document.body?.contains?.(element) || document.documentElement?.contains?.(element)));
+  }
+
+  function rememberDomItems(domItems) {
+    domItems.forEach((item) => {
+      if (!item.textKey) return;
+      const previous = state.domItemCache.get(item.textKey) || {};
+      state.domItemCache.set(item.textKey, {
+        ...previous,
+        ...item,
+        firstSeenAt: previous.firstSeenAt || Date.now(),
+        lastSeenAt: Date.now(),
+      });
+    });
+  }
+
+  function getCachedDomItems() {
+    return [...state.domItemCache.values()].sort((a, b) => {
+      const aPosition = Number.isFinite(a.position) ? a.position : Number.MAX_SAFE_INTEGER;
+      const bPosition = Number.isFinite(b.position) ? b.position : Number.MAX_SAFE_INTEGER;
+      if (aPosition !== bPosition) return aPosition - bPosition;
+      return (a.firstSeenAt || 0) - (b.firstSeenAt || 0);
+    });
+  }
+
+  function isSameMessageText(a, b) {
+    const left = cleanText(a);
+    const right = cleanText(b);
+    return left === right || left.startsWith(right) || right.startsWith(left);
+  }
+
+  function attachDomElements(conversationItems, domItems) {
+    const used = new Set();
+
+    return conversationItems.map((item) => {
+      const exactIndex = domItems.findIndex((candidate, index) => {
+        if (used.has(index)) return false;
+        return item.sourceId && candidate.sourceId && item.sourceId === candidate.sourceId;
+      });
+
+      const textIndex =
+        exactIndex >= 0
+          ? exactIndex
+          : domItems.findIndex((candidate, index) => {
+              if (used.has(index)) return false;
+              return candidate.role === item.role && isSameMessageText(candidate.rawText, item.rawText);
+            });
+
+      if (textIndex < 0) return { ...item, textKey: makeTextKey(item.role, item.rawText) };
+
+      used.add(textIndex);
+      const domItem = domItems[textIndex];
+      if (domItem.element) domItem.element.dataset.tmOutlineId = item.id;
+      return {
+        ...item,
+        element: domItem.element,
+        position: domItem.position,
+        textKey: domItem.textKey,
+      };
+    });
+  }
+
+  async function buildAllItems() {
+    const domItems = buildDomItems();
+    rememberDomItems(domItems);
+
+    const conversationItems = await fetchConversationItems();
+    let baseItems = getCachedDomItems();
+    if (conversationItems.length) {
+      const attachedItems = attachDomElements(conversationItems, domItems);
+      const attachedKeys = new Set(attachedItems.map((item) => item.sourceId || item.textKey || item.id));
+      const freshDomItems = domItems.filter((item) => !attachedKeys.has(item.sourceId || item.textKey || item.id));
+      baseItems = [...attachedItems, ...freshDomItems];
+    }
+    const filteredItems = CONFIG.onlyUserMessages ? baseItems.filter((item) => item.role === 'user') : baseItems;
+    const seen = new Set();
+
+    return filteredItems.filter((item) => {
+      const key = item.sourceId || item.textKey || item.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   function buildFixedOutlineItems(allItems) {
@@ -519,15 +783,62 @@
     setTimeout(() => el.classList.remove(CONFIG.highlightClass), 1400);
   }
 
+  function getEstimatedScrollTopForItem(id) {
+    const index = state.allItems.findIndex((candidate) => candidate.id === id);
+    if (index < 0) return null;
+
+    const maxScroll = Math.max(
+      0,
+      (document.documentElement?.scrollHeight || document.body?.scrollHeight || 0) - window.innerHeight
+    );
+    if (!maxScroll) return 0;
+    if (state.allItems.length <= 1) return maxScroll / 2;
+
+    return Math.round((index / (state.allItems.length - 1)) * maxScroll);
+  }
+
+  function scrollToEstimatedItem(id) {
+    const top = getEstimatedScrollTopForItem(id);
+    if (top === null) return;
+
+    state.pendingJumpId = id;
+    window.scrollTo({
+      top,
+      behavior: 'smooth',
+    });
+    setTimeout(() => refreshOutline('pending jump'), 700);
+    setTimeout(() => refreshOutline('pending jump settle'), 1500);
+  }
+
+  function completePendingJump() {
+    if (!state.pendingJumpId) return;
+
+    const item = state.allItems.find((candidate) => candidate.id === state.pendingJumpId);
+    if (!isConnectedElement(item?.element)) return;
+
+    state.pendingJumpId = null;
+    item.element.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    });
+    flashTarget(item.element);
+  }
+
   function jumpToMessage(id) {
     const item = state.allItems.find((candidate) => candidate.id === id);
-    if (!item?.element) return;
+    if (!item) return;
 
     state.clickLockUntil = Date.now() + CONFIG.clickLockMs;
     state.activeId = id;
 
     renderTicks(true);
     renderPanelItems();
+
+    if (!isConnectedElement(item.element)) {
+      scrollToEstimatedItem(id);
+      return;
+    }
 
     item.element.scrollIntoView({
       behavior: 'smooth',
@@ -598,16 +909,16 @@
     );
 
     state.allItems.forEach((item) => {
-      if (item.element) state.intersectionObserver.observe(item.element);
+      if (isConnectedElement(item.element)) state.intersectionObserver.observe(item.element);
     });
   }
 
-  function refreshOutline(reason = 'unknown') {
+  async function refreshOutline(reason = 'unknown') {
     logger.info('refresh:', reason);
 
     try {
       const oldActiveId = state.activeId;
-      state.allItems = buildAllItems();
+      state.allItems = await buildAllItems();
       state.outlineItems = buildFixedOutlineItems(state.allItems);
 
       if (!state.allItems.length) {
@@ -623,6 +934,7 @@
       renderTicks(true);
       renderPanelItems();
       setupIntersectionObserver();
+      completePendingJump();
       updatePinButton();
     } catch (err) {
       logger.error('refresh failed:', err);
@@ -706,6 +1018,15 @@
       return;
     }
     setTimeout(() => waitForReady(retries - 1), 500);
+  }
+
+  if (typeof globalThis !== 'undefined' && globalThis.__TM_CHATGPT_OUTLINE_EXPOSE_TEST_HOOKS__) {
+    globalThis.__TM_CHATGPT_OUTLINE_TEST_HOOKS__ = {
+      extractTextFromMessageContent,
+      getConversationIdFromPath,
+      getConversationPathNodeIds,
+      parseConversationResponse,
+    };
   }
 
   waitForReady();
