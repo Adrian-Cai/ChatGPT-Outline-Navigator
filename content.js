@@ -4,7 +4,8 @@
   const STORAGE_KEY = 'chatgpt_outline_settings';
 
   const DEFAULT_CONFIG = {
-    rootId: 'tm-chatgpt-outline-root',
+    rootId: 'tm-chatgpt-outline-root-v4',
+    legacyRootId: 'tm-chatgpt-outline-root',
     rootLayout: 'rail-card-v4',
     panelRight: 10,
     expandedWidth: 320,
@@ -244,12 +245,15 @@
   }
 
   function getOutlineRoots() {
-    return [...document.querySelectorAll(`#${CONFIG.rootId}`)].filter((node) => node instanceof HTMLElement);
+    return [...document.querySelectorAll(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`)].filter(
+      (node) => node instanceof HTMLElement
+    );
   }
 
   function isCurrentRoot(root) {
     return (
       root?.dataset?.tmOutlineLayout === CONFIG.rootLayout &&
+      root.id === CONFIG.rootId &&
       root.querySelector('.tm-current-btn') &&
       root.querySelector('.tm-outline-rail')
     );
@@ -266,7 +270,7 @@
 
     document.querySelectorAll('.tm-outline-shell, .tm-outline-panel, .tm-outline-rail, .tm-outline-rail-stack').forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
-      const ownerRoot = node.closest(`#${CONFIG.rootId}`);
+      const ownerRoot = node.closest(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`);
       if (!ownerRoot && node.parentElement) node.remove();
     });
   }
@@ -1092,7 +1096,7 @@
       if (nowLockedByClick()) return;
 
       for (const mutation of mutations) {
-        if (mutation.target instanceof Element && mutation.target.closest(`#${CONFIG.rootId}`)) {
+        if (mutation.target instanceof Element && mutation.target.closest(`#${CONFIG.rootId}, #${CONFIG.legacyRootId}`)) {
           continue;
         }
         if (mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length)) {
