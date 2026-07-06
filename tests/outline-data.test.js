@@ -18,6 +18,10 @@ function loadHooks() {
       getElementById: () => null,
       body: {
         appendChild: () => {},
+        contains: () => true,
+      },
+      documentElement: {
+        contains: () => true,
       },
     },
     HTMLElement: function HTMLElement() {},
@@ -43,7 +47,7 @@ function loadHooks() {
   return sandbox.__TM_CHATGPT_OUTLINE_TEST_HOOKS__;
 }
 
-test('parses the current ChatGPT conversation branch instead of only visible DOM', () => {
+test('parses all available ChatGPT conversation user messages for navigation titles', () => {
   const hooks = loadHooks();
 
   const items = hooks.parseConversationResponse({
@@ -75,12 +79,23 @@ test('parses the current ChatGPT conversation branch instead of only visible DOM
       'stale-sibling': {
         id: 'stale-sibling',
         parent: 'first-user',
-        children: [],
+        children: ['fourth-user'],
         message: {
           id: 'msg-stale',
           author: { role: 'user' },
           content: { parts: ['Stale branch question'] },
           create_time: 3,
+        },
+      },
+      'fourth-user': {
+        id: 'fourth-user',
+        parent: 'stale-sibling',
+        children: [],
+        message: {
+          id: 'msg-user-4',
+          author: { role: 'user' },
+          content: { parts: ['Fourth visible question'] },
+          create_time: 5,
         },
       },
       'current-user': {
@@ -101,5 +116,45 @@ test('parses the current ChatGPT conversation branch instead of only visible DOM
     items.filter((item) => item.role === 'user').map((item) => item.rawText)
   );
 
-  assert.deepEqual(userTexts, ['First question', 'Current branch question']);
+  assert.deepEqual(userTexts, [
+    'First question',
+    'Stale branch question',
+    'Current branch question',
+    'Fourth visible question',
+  ]);
+});
+
+test('picks the visible item nearest the viewport center as active', () => {
+  const hooks = loadHooks();
+  const makeElement = (top, bottom) => ({
+    getBoundingClientRect: () => ({
+      top,
+      bottom,
+      height: bottom - top,
+    }),
+  });
+
+  const activeId = hooks.pickBestViewportItemId([
+    { id: 'first', element: makeElement(-500, -100) },
+    { id: 'last', element: makeElement(280, 720) },
+  ]);
+
+  assert.equal(activeId, 'last');
+});
+
+test('maps a visible assistant response back to the nearest user navigation item', () => {
+  const hooks = loadHooks();
+
+  const mappedId = hooks.mapActiveIdToNearestOutlineId(
+    'assistant-last',
+    [{ id: 'user-first' }, { id: 'user-last' }],
+    [
+      { id: 'user-first' },
+      { id: 'assistant-first' },
+      { id: 'user-last' },
+      { id: 'assistant-last' },
+    ]
+  );
+
+  assert.equal(mappedId, 'user-last');
 });

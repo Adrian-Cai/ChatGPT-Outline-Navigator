@@ -51,6 +51,7 @@
     conversationFetchedAt: 0,
     conversationFetchPromise: null,
     domItemCache: new Map(),
+    activeItems: [],
     pendingJumpId: null,
   };
 
@@ -228,6 +229,7 @@
     state.conversationFetchedAt = 0;
     state.conversationFetchPromise = null;
     state.domItemCache = new Map();
+    state.activeItems = [];
     state.pendingJumpId = null;
   }
 
@@ -375,7 +377,8 @@
   function parseConversationResponse(data) {
     const mapping = data?.mapping || {};
     const nodeIds = getConversationPathNodeIds(data);
-    const orderedIds = nodeIds.length ? nodeIds : getFallbackOrderedNodeIds(data);
+    const fallbackIds = getFallbackOrderedNodeIds(data);
+    const orderedIds = fallbackIds.length ? fallbackIds : nodeIds;
 
     return orderedIds
       .map((nodeId, index) => {
@@ -501,8 +504,6 @@
       const role = guessRole(node, fallbackRole);
       fallbackRole = role === 'user' ? 'assistant' : 'user';
 
-      if (CONFIG.onlyUserMessages && role !== 'user') continue;
-
       const sourceId = getNodeSourceId(node);
       if (!node.dataset.tmOutlineId) node.dataset.tmOutlineId = sourceId || safeId(role);
       const rect = node.getBoundingClientRect();
@@ -598,6 +599,7 @@
       const freshDomItems = domItems.filter((item) => !attachedKeys.has(item.sourceId || item.textKey || item.id));
       baseItems = [...attachedItems, ...freshDomItems];
     }
+    state.activeItems = baseItems;
     const filteredItems = CONFIG.onlyUserMessages ? baseItems.filter((item) => item.role === 'user') : baseItems;
     const seen = new Set();
 
@@ -849,6 +851,39 @@
     flashTarget(item.element);
   }
 
+  function getViewportItemScore(item) {
+    if (!isConnectedElement(item?.element)) return -Infinity;
+
+    const rect = item.element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement?.clientHeight || 0;
+    if (!viewportHeight || rect.height <= 0) return -Infinity;
+
+    const visibleTop = Math.max(0, rect.top);
+    const visibleBottom = Math.min(viewportHeight, rect.bottom);
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    if (!visibleHeight) return -Infinity;
+
+    const visibleRatio = visibleHeight / rect.height;
+    const viewportCenter = viewportHeight / 2;
+    const elementCenter = rect.top + rect.height / 2;
+    return visibleRatio * 1000 - Math.abs(elementCenter - viewportCenter);
+  }
+
+  function pickBestViewportItemId(items = state.allItems) {
+    let bestId = null;
+    let bestScore = -Infinity;
+
+    items.forEach((item) => {
+      const score = getViewportItemScore(item);
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = item.id;
+      }
+    });
+
+    return bestId;
+  }
+
   function pickBestVisibleId(entriesVisibleMap) {
     let bestId = null;
     let bestScore = -Infinity;
@@ -920,9 +955,13 @@
       const oldActiveId = state.activeId;
       state.allItems = await buildAllItems();
       state.outlineItems = buildFixedOutlineItems(state.allItems);
+      const visibleActiveId = pickBestViewportItemId(state.activeItems);
+      const viewportActiveId = mapActiveIdToNearestOutlineId(visibleActiveId, state.outlineItems, state.activeItems);
 
       if (!state.allItems.length) {
         state.activeId = null;
+      } else if (viewportActiveId) {
+        state.activeId = viewportActiveId;
       } else if (oldActiveId && state.allItems.some((item) => item.id === oldActiveId)) {
         state.activeId = oldActiveId;
       } else {
@@ -1025,6 +1064,8 @@
       extractTextFromMessageContent,
       getConversationIdFromPath,
       getConversationPathNodeIds,
+      mapActiveIdToNearestOutlineId,
+      pickBestViewportItemId,
       parseConversationResponse,
     };
   }
